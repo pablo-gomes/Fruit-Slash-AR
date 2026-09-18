@@ -168,13 +168,13 @@ export default function App() {
     handTrackerRef.current.controlMode = settings.controlMode;
   }, [settings]);
 
-  // Window Resize Observer
+  // Window & Container Resize Observer with orientationchange and ResizeObserver support
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
-        const w = Math.max(320, Math.round(rect.width || window.innerWidth));
-        const h = Math.max(400, Math.round(rect.height || window.innerHeight));
+        const w = Math.max(300, Math.round(rect.width || window.innerWidth));
+        const h = Math.max(350, Math.round(rect.height || window.innerHeight));
         setDimensions({ width: w, height: h });
         gameEngineRef.current.setDimensions(w, h);
       }
@@ -182,8 +182,55 @@ export default function App() {
 
     updateSize();
     window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    window.addEventListener('orientationchange', updateSize);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      ro = new ResizeObserver(() => updateSize());
+      ro.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      window.removeEventListener('orientationchange', updateSize);
+      ro?.disconnect();
+    };
   }, []);
+
+  // Desktop & Smart TV Keyboard / Remote Navigation Controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle Fullscreen on 'F' key
+      if (e.code === 'KeyF' && !e.repeat) {
+        toggleFullscreen();
+        return;
+      }
+
+      // Pause or resume on Escape or 'P' key
+      if ((e.code === 'Escape' || e.code === 'KeyP') && !e.repeat) {
+        setGameState((prev) => {
+          if (prev === 'playing') return 'paused';
+          if (prev === 'paused') return 'playing';
+          return prev;
+        });
+        return;
+      }
+
+      // Start game or action on Space or Enter
+      if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) {
+        if (gameState === 'menu') {
+          startGame(gameMode);
+        } else if (gameState === 'paused') {
+          setGameState('playing');
+        } else if (gameState === 'gameover') {
+          startGame(gameMode);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState, gameMode]);
 
   // Initialize camera asynchronously
   const initCamera = useCallback(async (facing: 'user' | 'environment') => {
@@ -356,7 +403,7 @@ export default function App() {
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-screen bg-[#0B0B12] text-white flex flex-col items-center justify-center overflow-hidden select-none"
+      className="relative w-full h-screen h-[100dvh] bg-[#0B0B12] text-white flex flex-col items-center justify-center overflow-hidden select-none"
     >
       {/* Background AR Video Feed */}
       <video

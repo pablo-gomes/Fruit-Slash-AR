@@ -53,14 +53,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const frenzyActive = engine.frenzyActive;
       const freezeActive = engine.freezeTimer > 0;
 
+      // Dynamic responsive scale factor based on screen size (mobile -> desktop -> 4K TV)
+      const scale = Math.max(0.75, Math.min(2.3, Math.sqrt(width * width + height * height) / 1000));
+
+      // Device Pixel Ratio for ultra-crisp graphics on Retina and 4K displays
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const targetW = Math.round(width * dpr);
+      const targetH = Math.round(height * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
       // Clear frame
       ctx.clearRect(0, 0, width, height);
       ctx.save();
 
       // Screen Shake effect
       if (screenShake > 0) {
-        const shakeX = (Math.random() - 0.5) * screenShake * 1.5;
-        const shakeY = (Math.random() - 0.5) * screenShake * 1.5;
+        const shakeX = (Math.random() - 0.5) * screenShake * 1.5 * scale;
+        const shakeY = (Math.random() - 0.5) * screenShake * 1.5 * scale;
         ctx.translate(shakeX, shakeY);
       }
 
@@ -129,14 +144,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       }
 
-      // 3. Render Blade Trail (with glowing gradient and dynamic width)
+      // 3. Render Blade Trail (with glowing gradient and dynamic responsive width)
       if (bladeTrail.length >= 2) {
-        drawBladeTrail(ctx, bladeTrail, activeBlade);
+        drawBladeTrail(ctx, bladeTrail, activeBlade, scale);
       }
 
-      // 4. Render Hand Cursor / Blade Focus Point
-      if (trackFrame.confidence > 0.10 || trackFrame.isHandFound) {
-        drawHandCrosshair(ctx, trackFrame.x, trackFrame.y, trackFrame.isSlashing, activeBlade, trackFrame.confidence);
+      // 4. Render Hand Cursor / Blade Focus Point with Palm vs Body validation
+      if (trackFrame.confidence > 0.08 || trackFrame.isHandFound || trackFrame.bodyPartDetected !== 'none') {
+        drawHandCrosshair(
+          ctx,
+          trackFrame.x,
+          trackFrame.y,
+          trackFrame.isSlashing,
+          activeBlade,
+          trackFrame.confidence,
+          trackFrame.isPalmValidated,
+          trackFrame.bodyPartDetected,
+          scale
+        );
       }
 
       // 5. Render Floating Text
@@ -144,24 +169,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const ft = floatingTexts[i];
         ctx.save();
         ctx.globalAlpha = Math.max(0, Math.min(1, ft.alpha));
-        ctx.font = `800 ${Math.round(22 * ft.scale)}px 'Orbitron', sans-serif`;
+        ctx.font = `800 ${Math.round(20 * ft.scale * scale)}px 'Orbitron', sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
         // Outline
         ctx.strokeStyle = '#0B0B12';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 4 * scale;
         ctx.strokeText(ft.text, ft.x, ft.y);
 
         // Fill
         ctx.fillStyle = ft.color;
         ctx.shadowColor = ft.color;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 10 * scale;
         ctx.fillText(ft.text, ft.x, ft.y);
         ctx.restore();
       }
 
-      ctx.restore();
+      ctx.restore(); // Screen shake restore
+      ctx.restore(); // DPR scale restore
 
       animId = requestAnimationFrame(render);
     };
@@ -383,7 +409,12 @@ function drawBomb(ctx: CanvasRenderingContext2D, r: number) {
 }
 
 // Helper: Render glowing blade trail
-function drawBladeTrail(ctx: CanvasRenderingContext2D, trail: BladePoint[], blade: BladeStyle) {
+function drawBladeTrail(
+  ctx: CanvasRenderingContext2D,
+  trail: BladePoint[],
+  blade: BladeStyle,
+  scale: number = 1.0
+) {
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -400,9 +431,9 @@ function drawBladeTrail(ctx: CanvasRenderingContext2D, trail: BladePoint[], blad
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.strokeStyle = blade.glowColor;
-    ctx.lineWidth = 14 * ratio + 3;
+    ctx.lineWidth = (14 * ratio + 3) * scale;
     ctx.shadowColor = blade.color;
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = 18 * scale;
     ctx.stroke();
 
     // Inner bright core
@@ -410,7 +441,7 @@ function drawBladeTrail(ctx: CanvasRenderingContext2D, trail: BladePoint[], blad
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 4 * ratio + 1.5;
+    ctx.lineWidth = (4 * ratio + 1.5) * scale;
     ctx.shadowBlur = 0;
     ctx.stroke();
   }
@@ -418,10 +449,10 @@ function drawBladeTrail(ctx: CanvasRenderingContext2D, trail: BladePoint[], blad
   // Blade tip flare
   const tip = trail[len - 1];
   ctx.beginPath();
-  ctx.arc(tip.x, tip.y, 7, 0, Math.PI * 2);
+  ctx.arc(tip.x, tip.y, 7 * scale, 0, Math.PI * 2);
   ctx.fillStyle = '#FFFFFF';
   ctx.shadowColor = blade.color;
-  ctx.shadowBlur = 20;
+  ctx.shadowBlur = 20 * scale;
   ctx.fill();
 
   ctx.restore();
@@ -434,19 +465,49 @@ function drawHandCrosshair(
   y: number,
   isSlashing: boolean,
   blade: BladeStyle,
-  confidence: number = 0.5
+  confidence: number = 0.5,
+  isPalmValidated: boolean = false,
+  bodyPartDetected: 'palm' | 'head_face' | 'torso_body' | 'none' = 'none',
+  scale: number = 1.0
 ) {
   ctx.save();
   ctx.translate(x, y);
 
   const t = Date.now() * 0.003;
-  const radius = isSlashing ? 26 : 18;
+  const radius = (isSlashing ? 28 : 20) * scale;
+
+  // Determine indicator colors and status message
+  let strokeColor = isSlashing ? blade.color : 'rgba(66, 232, 255, 0.7)';
+  let glowColor = blade.color;
+  let label = `✋ PALMA OK ${Math.round(confidence * 100)}%`;
+  let labelColor = isSlashing ? blade.color : 'rgba(255, 255, 255, 0.9)';
+
+  if (isSlashing) {
+    label = '⚡ CORTE!';
+  } else if (!isPalmValidated) {
+    if (bodyPartDetected === 'head_face') {
+      strokeColor = '#FF9F1C';
+      glowColor = '#FF9F1C';
+      label = '⚠️ ROSTO/CABEÇA (USE A PALMA ✋)';
+      labelColor = '#FFD23F';
+    } else if (bodyPartDetected === 'torso_body') {
+      strokeColor = '#FF3D71';
+      glowColor = '#FF3D71';
+      label = '⚠️ CORPO (USE A PALMA ✋)';
+      labelColor = '#FF3D71';
+    } else {
+      strokeColor = 'rgba(255, 255, 255, 0.4)';
+      glowColor = '#00E5FF';
+      label = '✋ MOSTRE A PALMA DA MÃO';
+      labelColor = 'rgba(255, 255, 255, 0.7)';
+    }
+  }
 
   // Outer segmented targeting arcs that gently rotate
-  ctx.strokeStyle = isSlashing ? blade.color : 'rgba(66, 232, 255, 0.6)';
-  ctx.lineWidth = isSlashing ? 2.5 : 1.5;
-  ctx.shadowColor = blade.color;
-  ctx.shadowBlur = isSlashing ? 15 : 6;
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = (isSlashing ? 2.5 : 1.6) * scale;
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur = (isSlashing ? 16 : 8) * scale;
 
   // Segment 1
   ctx.beginPath();
@@ -460,26 +521,43 @@ function drawHandCrosshair(
 
   // Thin full guide ring
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1 * scale;
   ctx.shadowBlur = 0;
   ctx.beginPath();
   ctx.arc(0, 0, radius * 0.7, 0, Math.PI * 2);
   ctx.stroke();
 
   // Core energy dot
-  ctx.fillStyle = isSlashing ? '#FFFFFF' : blade.color;
-  ctx.shadowColor = blade.color;
-  ctx.shadowBlur = isSlashing ? 18 : 8;
+  ctx.fillStyle = isSlashing ? '#FFFFFF' : strokeColor;
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur = (isSlashing ? 18 : 8) * scale;
   ctx.beginPath();
-  ctx.arc(0, 0, isSlashing ? 6 : 3.5, 0, Math.PI * 2);
+  ctx.arc(0, 0, (isSlashing ? 6 : 3.5) * scale, 0, Math.PI * 2);
   ctx.fill();
 
-  // Hand Status Badge below cursor
-  ctx.font = '9px "Orbitron", sans-serif';
-  ctx.fillStyle = isSlashing ? blade.color : 'rgba(255, 255, 255, 0.8)';
+  // Hand Status Badge below cursor with protective dark pill background
+  const fontSize = Math.max(9, Math.round(11 * scale));
+  ctx.font = `700 ${fontSize}px "Orbitron", sans-serif`;
   ctx.textAlign = 'center';
-  const label = isSlashing ? '⚡ SLASH' : `✋ MÃO ${Math.round(confidence * 100)}%`;
-  ctx.fillText(label, 0, radius + 14);
+  ctx.textBaseline = 'middle';
+
+  const textWidth = ctx.measureText(label).width;
+  const pillPaddingX = 8 * scale;
+  const pillHeight = (fontSize + 6) * scale;
+  const pillY = radius + 14 * scale;
+
+  ctx.fillStyle = 'rgba(11, 11, 18, 0.78)';
+  ctx.beginPath();
+  ctx.roundRect(-textWidth / 2 - pillPaddingX, pillY - pillHeight / 2, textWidth + pillPaddingX * 2, pillHeight, 4 * scale);
+  ctx.fill();
+
+  ctx.strokeStyle = isPalmValidated ? 'rgba(0, 229, 255, 0.3)' : 'rgba(255, 61, 113, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = labelColor;
+  ctx.shadowBlur = 0;
+  ctx.fillText(label, 0, pillY);
 
   ctx.restore();
 }

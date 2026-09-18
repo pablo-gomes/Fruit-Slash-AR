@@ -205,6 +205,18 @@ export class GameEngine {
     }
   }
 
+  public getScreenScale(): number {
+    // Responsive scale based on viewport:
+    // Small mobile (360x640) -> ~0.85
+    // Tablet / laptop (1024x768) -> ~1.15
+    // Desktop 1080p (1920x1080) -> ~1.5
+    // Large TV / 4K (3840x2160) -> ~2.2
+    const diag = Math.sqrt(this.width * this.width + this.height * this.height);
+    const baseDiag = 1000; // sqrt(800^2 + 600^2)
+    const ratio = diag / baseDiag;
+    return Math.max(0.75, Math.min(2.3, ratio));
+  }
+
   private spawnSingleObject(pattern: number, index: number, totalInBatch: number) {
     // Select object type
     let type: FruitType = 'apple';
@@ -242,26 +254,28 @@ export class GameEngine {
     }
 
     const cfg = FRUIT_CONFIGS[type];
-    const margin = Math.max(25, Math.min(60, this.width * 0.12));
+    const scale = this.getScreenScale();
+    const scaledRadius = Math.round(cfg.radius * scale);
+    const margin = Math.max(25, Math.min(scaledRadius * 1.5, this.width * 0.12));
     
     // Calculate spawn X and trajectory based on pattern
     let startX = margin + Math.random() * Math.max(80, this.width - margin * 2);
-    let vx = (Math.random() - 0.5) * 180;
+    let vx = (Math.random() - 0.5) * 180 * scale;
 
     if (totalInBatch > 1) {
-      // Coordinated pattern across screen width (Section 46)
+      // Coordinated pattern across screen width
       const usableW = Math.max(100, this.width - margin * 2);
       const step = usableW / (totalInBatch + 1);
-      startX = margin + step * (index + 1) + (Math.random() - 0.5) * 20;
+      startX = margin + step * (index + 1) + (Math.random() - 0.5) * 20 * scale;
       // Incline towards center
-      vx = (this.width / 2 - startX) * 0.4 + (Math.random() - 0.5) * 50;
+      vx = (this.width / 2 - startX) * 0.4 + (Math.random() - 0.5) * 50 * scale;
     }
 
-    const startY = this.height + cfg.radius + 10;
-    // Launch velocity: higher screen requires stronger upward velocity
-    const targetApexY = this.height * (0.18 + Math.random() * 0.32);
-    const gravity = 780; // px/s^2
-    const heightDiff = Math.max(100, startY - targetApexY);
+    const startY = this.height + scaledRadius + 10;
+    // Launch velocity: scaled dynamically with screen height so fruits have consistent airtime
+    const targetApexY = this.height * (0.16 + Math.random() * 0.30);
+    const gravity = Math.max(650, this.height * 1.15); // px/s^2 proportional to viewport height
+    const heightDiff = Math.max(80, startY - targetApexY);
     const launchVy = -Math.sqrt(2 * gravity * heightDiff) * (cfg.speedMultiplier || 1.0);
 
     const isBomb = isDisguisedBomb ? true : !!cfg.isBomb;
@@ -279,7 +293,7 @@ export class GameEngine {
       y: startY,
       vx,
       vy: launchVy,
-      radius: cfg.radius,
+      radius: scaledRadius,
       points: isDisguisedBomb ? 0 : cfg.points,
       color: objColor,
       juiceColor: objJuiceColor,
@@ -301,7 +315,7 @@ export class GameEngine {
   }
 
   private updateObjects(dt: number, bladeTrail: BladePoint[], activeBlade: BladeStyle) {
-    const gravity = 780;
+    const gravity = Math.max(650, this.height * 1.15);
 
     for (let i = this.objects.length - 1; i >= 0; i--) {
       const obj = this.objects[i];
@@ -523,20 +537,21 @@ export class GameEngine {
   }
 
   private createJuiceSplatter(x: number, y: number, juiceColor: string, bladeColor: string, sliceAngle: number) {
-    const particleCount = 20;
+    const scale = this.getScreenScale();
+    const particleCount = Math.round(20 * Math.min(1.5, scale));
     for (let i = 0; i < particleCount; i++) {
       // Particles spray outward along cut angle
       const spread = (Math.random() - 0.5) * 1.8;
       const angle = (Math.random() < 0.5 ? sliceAngle + Math.PI / 2 : sliceAngle - Math.PI / 2) + spread;
-      const speed = 80 + Math.random() * 240;
+      const speed = (80 + Math.random() * 240) * scale;
 
       this.particles.push({
-        x: x + (Math.random() - 0.5) * 15,
-        y: y + (Math.random() - 0.5) * 15,
+        x: x + (Math.random() - 0.5) * 15 * scale,
+        y: y + (Math.random() - 0.5) * 15 * scale,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 50,
+        vy: Math.sin(angle) * speed - 50 * scale,
         color: Math.random() < 0.75 ? juiceColor : bladeColor,
-        size: 3 + Math.random() * 6,
+        size: (3 + Math.random() * 6) * scale,
         alpha: 1.0,
         life: 0,
         maxLife: 0.5 + Math.random() * 0.4,

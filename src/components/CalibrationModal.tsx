@@ -26,8 +26,8 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
   const isLightingGood = lightLevel > 0.25;
 
   return (
-    <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#12121E] border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+    <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto bg-[#12121E] border border-white/10 rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between w-full mb-4">
           <div className="flex items-center gap-2">
@@ -64,10 +64,10 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
           <p className="mt-3 text-xs font-semibold text-white/80 tracking-wide text-center z-10">
             {isHandDetected ? (
               <span className="text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 inline" /> MÃO DETECTADA COM SUCESSO!
+                <CheckCircle2 className="w-4 h-4 inline" /> PALMA DA MÃO RECONHECIDA!
               </span>
             ) : (
-              'Levante a mão em frente à câmera e mova-se para testar a lâmina'
+              'Abra a palma da mão para a câmera (cabeça e corpo são ignorados)'
             )}
           </p>
         </div>
