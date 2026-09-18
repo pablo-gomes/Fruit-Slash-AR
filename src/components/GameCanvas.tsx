@@ -91,7 +91,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.rotate(obj.rotation);
 
           if (obj.isBomb) {
-            drawBomb(ctx, obj.radius);
+            if (obj.isDisguisedBomb) {
+              drawDisguisedBomb(ctx, obj);
+            } else {
+              drawBomb(ctx, obj.radius);
+            }
           } else {
             drawFruit(ctx, obj);
           }
@@ -219,6 +223,82 @@ function drawFruit(ctx: CanvasRenderingContext2D, obj: SpawnedObject) {
     ctx.arc(0, 0, r * 1.25, 0, Math.PI * 2);
     ctx.stroke();
   }
+
+  ctx.restore();
+}
+
+// Helper: Render disguised bomb (looks like a golden/yellow fruit with sneaky warning clues)
+function drawDisguisedBomb(ctx: CanvasRenderingContext2D, obj: SpawnedObject) {
+  const r = obj.radius;
+  const now = Date.now();
+
+  ctx.save();
+
+  // 1. Subtle fuse peeking out of the top of the fruit
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.85);
+  ctx.quadraticCurveTo(r * 0.35, -r * 1.2, r * 0.22, -r * 1.45);
+  ctx.strokeStyle = '#D2B48C';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Sparkling animated fuse spark
+  const sparkPulse = Math.sin(now * 0.035) * 2.5;
+  ctx.fillStyle = '#FFE600';
+  ctx.shadowColor = '#FF3300';
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.arc(r * 0.22, -r * 1.45, 5 + sparkPulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 2. Fruit Body (looks like a juicy yellow/golden fruit)
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+
+  // Gradient: bright golden yellow, but with a subtle warm amber/sinister shift at the core
+  const grad = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+  grad.addColorStop(0, '#FFFFA0');
+  grad.addColorStop(0.3, obj.color || '#FFD700');
+  grad.addColorStop(0.75, '#FF9900');
+  grad.addColorStop(1, '#B85E00');
+  ctx.fillStyle = grad;
+  ctx.shadowColor = '#FF6B00';
+  ctx.shadowBlur = 16;
+  ctx.fill();
+
+  // Outline with subtle warning pulsation
+  const warnPhase = Math.sin(now * 0.012);
+  ctx.strokeStyle = warnPhase > 0.4 ? 'rgba(255, 60, 60, 0.7)' : 'rgba(255, 255, 255, 0.6)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Faint pulsing danger core behind emoji
+  const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.6);
+  coreGrad.addColorStop(0, `rgba(255, 50, 50, ${0.25 + warnPhase * 0.15})`);
+  coreGrad.addColorStop(1, 'rgba(255, 50, 50, 0)');
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Fruit emoji badge (yellow fruit: lemon, banana, star, pineapple)
+  ctx.font = `${Math.round(r * 1.15)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(obj.emoji, 0, 2);
+
+  // Outer aura: pulses between gold and warning crimson dash
+  const auraColor = warnPhase > 0 ? '#FF3D71' : '#FFF380';
+  ctx.strokeStyle = auraColor;
+  ctx.lineWidth = 3.2;
+  ctx.shadowColor = auraColor;
+  ctx.shadowBlur = 14;
+  ctx.setLineDash([5, 5]);
+  ctx.lineDashOffset = (now * 0.015) % 20;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 1.25, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   ctx.restore();
 }

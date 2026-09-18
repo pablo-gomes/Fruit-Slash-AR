@@ -10,6 +10,15 @@ import {
 import { FRUIT_CONFIGS } from '../data/fruits';
 import { soundEngine } from './SoundEngine';
 
+// Varied yellow fruit types for the bonus frenzy mode
+const YELLOW_FRUIT_VARIANTS = [
+  { name: 'Estrela Dourada', emoji: '🌟', color: '#FFD700', juiceColor: '#FFF380' },
+  { name: 'Banana Dourada', emoji: '🍌', color: '#FFDE59', juiceColor: '#FFF7B2' },
+  { name: 'Abacaxi Dourado', emoji: '🍍', color: '#FFC107', juiceColor: '#FFE082' },
+  { name: 'Limão Siciliano', emoji: '🍋', color: '#FFEE55', juiceColor: '#FFF9A6' },
+  { name: 'Manga Dourada', emoji: '🥭', color: '#FFB300', juiceColor: '#FFE57F' },
+];
+
 export interface GameStateData {
   score: number;
   lives: number;
@@ -48,7 +57,7 @@ export class GameEngine {
 
   public frenzyActive: boolean = false;
   public frenzyTimer: number = 0;
-  public frenzyMaxTime: number = 8.0;
+  public frenzyMaxTime: number = 4.0; // Shorter, intense bonus rush (user requested)
 
   public freezeTimer: number = 0;
   public timeRemaining: number = 60; // for time_attack
@@ -199,22 +208,36 @@ export class GameEngine {
   private spawnSingleObject(pattern: number, index: number, totalInBatch: number) {
     // Select object type
     let type: FruitType = 'apple';
-    const isBombRush = this.mode === 'bomb_rush';
-    const bombChance = this.mode === 'zen' ? 0 : this.frenzyActive ? 0.05 : isBombRush ? 0.45 : 0.18;
+    let isDisguisedBomb = false;
+    let customVariant: { name: string; emoji: string; color: string; juiceColor: string } | null = null;
 
-    if (Math.random() < bombChance) {
-      type = 'bomb';
+    if (this.frenzyActive) {
+      // Frenzy Bonus Mode: Yellow fruits flood the screen with sneaky disguised bombs mixed in!
+      type = 'golden';
+      customVariant = YELLOW_FRUIT_VARIANTS[Math.floor(Math.random() * YELLOW_FRUIT_VARIANTS.length)];
+
+      // Disguised bomb roll: ~24% chance unless in zen mode (user requested disguised bombs in bonus mode)
+      if (this.mode !== 'zen' && Math.random() < 0.24) {
+        isDisguisedBomb = true;
+      }
     } else {
-      const fruitTypes: FruitType[] = ['apple', 'orange', 'watermelon', 'banana', 'strawberry', 'kiwi', 'pineapple'];
-      const specialRoll = Math.random();
-      if (this.frenzyActive || specialRoll < 0.06) {
-        type = 'golden';
-      } else if (specialRoll < 0.10 && this.lives < this.maxLives && this.mode === 'classic') {
-        type = 'heart';
-      } else if (specialRoll < 0.14) {
-        type = 'freeze';
+      const isBombRush = this.mode === 'bomb_rush';
+      const bombChance = this.mode === 'zen' ? 0 : isBombRush ? 0.45 : 0.18;
+
+      if (Math.random() < bombChance) {
+        type = 'bomb';
       } else {
-        type = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
+        const fruitTypes: FruitType[] = ['apple', 'orange', 'watermelon', 'banana', 'strawberry', 'kiwi', 'pineapple'];
+        const specialRoll = Math.random();
+        if (specialRoll < 0.06) {
+          type = 'golden';
+        } else if (specialRoll < 0.10 && this.lives < this.maxLives && this.mode === 'classic') {
+          type = 'heart';
+        } else if (specialRoll < 0.14) {
+          type = 'freeze';
+        } else {
+          type = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
+        }
       }
     }
 
@@ -241,20 +264,27 @@ export class GameEngine {
     const heightDiff = Math.max(100, startY - targetApexY);
     const launchVy = -Math.sqrt(2 * gravity * heightDiff) * (cfg.speedMultiplier || 1.0);
 
+    const isBomb = isDisguisedBomb ? true : !!cfg.isBomb;
+    const objName = isDisguisedBomb ? 'Bomba Disfarçada' : (customVariant ? customVariant.name : cfg.name);
+    const objEmoji = customVariant ? customVariant.emoji : cfg.emoji;
+    const objColor = customVariant ? customVariant.color : cfg.color;
+    const objJuiceColor = isDisguisedBomb ? '#FF3D71' : (customVariant ? customVariant.juiceColor : cfg.juiceColor);
+
     const obj: SpawnedObject = {
       id: Math.random().toString(36).substring(2, 9),
       type,
-      name: cfg.name,
-      emoji: cfg.emoji,
+      name: objName,
+      emoji: objEmoji,
       x: startX,
       y: startY,
       vx,
       vy: launchVy,
       radius: cfg.radius,
-      points: cfg.points,
-      color: cfg.color,
-      juiceColor: cfg.juiceColor,
-      isBomb: !!cfg.isBomb,
+      points: isDisguisedBomb ? 0 : cfg.points,
+      color: objColor,
+      juiceColor: objJuiceColor,
+      isBomb,
+      isDisguisedBomb,
       rotation: Math.random() * Math.PI * 2,
       vRot: (Math.random() - 0.5) * 5.0,
       sliced: false,
@@ -262,7 +292,8 @@ export class GameEngine {
       sliceTime: 0,
     };
 
-    if (obj.isBomb) {
+    // Only play audible siren on standard bombs, keeping disguised bombs stealthy
+    if (obj.isBomb && !isDisguisedBomb) {
       soundEngine.playBombWarning();
     }
 
@@ -289,14 +320,9 @@ export class GameEngine {
 
         // Check if object dropped below screen
         if (obj.y > this.height + obj.radius * 2 && obj.vy > 0) {
-          if (!obj.isBomb && this.mode === 'classic' && !obj.type.includes('golden') && !obj.type.includes('heart')) {
+          if (!obj.isBomb && !obj.type.includes('golden') && !obj.type.includes('heart')) {
             this.missedCount++;
-            this.lives--;
             this.combo = 1;
-            soundEngine.triggerHaptic(50);
-            if (this.lives <= 0) {
-              this.triggerGameOver('3 Frutas perdidas!');
-            }
           }
           this.objects.splice(i, 1);
         }
@@ -475,11 +501,15 @@ export class GameEngine {
       });
     }
 
-    this.addFloatingText('BOOM! -1 VIDA', obj.x, obj.y - 40, '#FF3333', 1.6);
+    if (obj.isDisguisedBomb) {
+      this.addFloatingText('⚠️ BOMBA DISFARÇADA! -1 VIDA', obj.x, obj.y - 40, '#FF3333', 1.8);
+    } else {
+      this.addFloatingText('BOOM! -1 VIDA', obj.x, obj.y - 40, '#FF3333', 1.6);
+    }
 
     this.lives--;
     if (this.lives <= 0) {
-      this.triggerGameOver('Bomba atingida!');
+      this.triggerGameOver(obj.isDisguisedBomb ? 'Caiu na bomba disfarçada!' : 'Bomba atingida!');
     }
   }
 
@@ -489,7 +519,7 @@ export class GameEngine {
     this.screenShake = 8;
     soundEngine.startFrenzyMusic();
     soundEngine.playCombo(10);
-    this.addFloatingText('🔥 FRENZY MODE! 🔥', this.width / 2, this.height * 0.3, '#FFD23F', 2.0);
+    this.addFloatingText('🔥 BÔNUS AMARELO! CUIDADO! 🔥', this.width / 2, this.height * 0.3, '#FFD23F', 2.0);
   }
 
   private createJuiceSplatter(x: number, y: number, juiceColor: string, bladeColor: string, sliceAngle: number) {

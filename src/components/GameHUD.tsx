@@ -56,10 +56,15 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         {/* Center: Frenzy / Freeze or Mode Timer Notification */}
         <div className="flex flex-col items-center gap-1">
           {frenzyActive && (
-            <div className="flex items-center gap-2 bg-gradient-to-r from-[#FF3D71] to-[#FF8811] px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,61,113,0.8)] border border-white/40 animate-pulse">
-              <Flame className="w-4 h-4 text-yellow-200 fill-yellow-200 animate-bounce" />
-              <span className="font-arcade text-xs sm:text-sm font-black text-white tracking-widest uppercase">
-                FRENZY! {frenzyTimer.toFixed(1)}s
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="flex items-center gap-2 bg-gradient-to-r from-[#FF3D71] to-[#FF8811] px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,61,113,0.8)] border border-white/40 animate-pulse">
+                <Flame className="w-4 h-4 text-yellow-200 fill-yellow-200 animate-bounce" />
+                <span className="font-arcade text-xs sm:text-sm font-black text-white tracking-widest uppercase">
+                  BÔNUS AMARELO! {frenzyTimer.toFixed(1)}s
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-yellow-300 drop-shadow">
+                ⚠️ Cuidado com Bombas Disfarçadas!
               </span>
             </div>
           )}

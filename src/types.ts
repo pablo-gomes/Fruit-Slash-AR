@@ -52,6 +52,7 @@ export interface SpawnedObject {
   color: string;
   juiceColor: string;
   isBomb: boolean;
+  isDisguisedBomb?: boolean;
   rotation: number;
   vRot: number;
   sliced: boolean;
