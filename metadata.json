@@ -1,0 +1,6 @@
+{
+  "name": "Fruit Slash AR",
+  "description": "Jogo de ação AR mobile com rastreamento de mãos via câmera, lâmina virtual e corte de frutas estilo arcade.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
