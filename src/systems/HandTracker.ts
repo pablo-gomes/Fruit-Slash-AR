@@ -31,6 +31,11 @@ export class HandTracker {
   private isPalmValidated: boolean = false;
   private bodyPartDetected: 'palm' | 'head_face' | 'torso_body' | 'none' = 'none';
 
+  // Per-frame computation cache (prevents redundant calculation and zero-delta frame corruption)
+  private lastProcessTimestamp: number = 0;
+  private cachedTrackingFrame: TrackingFrame | null = null;
+  private lastVideoCurrentTime: number = -1;
+
   private isRunning: boolean = false;
   private stream: MediaStream | null = null;
   public cameraFacing: 'user' | 'environment' = 'user';
@@ -39,10 +44,10 @@ export class HandTracker {
 
   // Trajectory history for blade trail
   private bladePoints: BladePoint[] = [];
-  private maxTrailLength: number = 22;
-  private maxTrailAge: number = 190; // milliseconds
+  private maxTrailLength: number = 26;
+  private maxTrailAge: number = 220; // milliseconds
 
-  // Grid dimensions for clustering hand motion (16x12 grid)
+  // Grid dimensions for clustering hand motion (16x12 grid = 192 cells)
   private readonly gridCols = 16;
   private readonly gridRows = 12;
 
@@ -57,8 +62,18 @@ export class HandTracker {
     this.video = video;
     if (this.video) {
       this.video.muted = true;
+      this.video.playsInline = true;
       this.video.setAttribute('playsinline', 'true');
       this.video.setAttribute('webkit-playsinline', 'true');
+    }
+  }
+
+  /**
+   * Resumes video stream if paused by browser power-saving or autoplay policy
+   */
+  public ensureVideoPlaying() {
+    if (this.video && this.video.paused && this.isRunning) {
+      this.video.play().catch(() => {});
     }
   }
 
@@ -93,16 +108,25 @@ export class HandTracker {
       this.stream = stream;
       if (this.video) {
         this.video.muted = true;
+        this.video.playsInline = true;
         this.video.setAttribute('playsinline', 'true');
         this.video.setAttribute('webkit-playsinline', 'true');
         this.video.srcObject = this.stream;
-        try {
-          await this.video.play();
-        } catch {
-          // In some mobile browsers, play() resolves on first user touch
-        }
+
+        const tryPlay = async () => {
+          try {
+            await this.video?.play();
+          } catch {
+            // Autoplay policy: will resume on first user interaction
+          }
+        };
+
+        this.video.onloadedmetadata = () => tryPlay();
+        await tryPlay();
       }
       this.isRunning = true;
+      this.lastVideoCurrentTime = -1;
+      this.prevFrameData = null;
       return { success: true };
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Erro ao acessar câmera.';
@@ -120,6 +144,7 @@ export class HandTracker {
     }
     this.isRunning = false;
     this.prevFrameData = null;
+    this.cachedTrackingFrame = null;
     this.isHandFound = false;
   }
 
@@ -144,6 +169,7 @@ export class HandTracker {
     this.isPalmValidated = true;
     this.bodyPartDetected = 'palm';
     this.bladePoints.push({ x, y, time: now, speed: 1.4 });
+    this.cachedTrackingFrame = null;
   }
 
   public addManualPoint(x: number, y: number) {
@@ -171,19 +197,29 @@ export class HandTracker {
     this.bodyPartDetected = 'palm';
 
     // Smooth trail point insertion
-    const minSlashSpeed = 0.22 / this.sensitivity;
+    const minSlashSpeed = 0.16 / this.sensitivity;
     if (speed >= minSlashSpeed || this.bladePoints.length > 0) {
       this.bladePoints.push({ x, y, time: now, speed: Math.max(0.8, speed) });
     }
+    this.cachedTrackingFrame = null;
   }
 
   /**
-   * Process camera frame with Head/Torso-Rejection and Strict Palm Biometrics
+   * Process camera frame with Head/Torso-Rejection, Universal Chrominance,
+   * and Stutter-Free Frame Caching
    */
   public processFrame(viewWidth: number, viewHeight: number): TrackingFrame {
     const now = performance.now();
 
-    // Fallback if camera is off, loading, or in touch mode
+    // 1. Stutter-Prevention Cache:
+    // If called multiple times within the same rendering cycle (< 12ms),
+    // return cached tracking frame to avoid CPU thrashing and zero-delta frame corruption!
+    if (this.cachedTrackingFrame && (now - this.lastProcessTimestamp < 12)) {
+      this.pruneTrail(now);
+      return this.cachedTrackingFrame;
+    }
+
+    // 2. Fallback if camera is off, in touch mode, or video not yet ready
     if (
       this.controlMode === 'touch_mouse' || 
       !this.isRunning || 
@@ -192,10 +228,10 @@ export class HandTracker {
       !this.procCtx
     ) {
       this.pruneTrail(now);
-      return {
+      const res: TrackingFrame = {
         x: this.smoothedX || viewWidth / 2,
         y: this.smoothedY || viewHeight / 2,
-        isSlashing: this.isPalmValidated && this.currentSpeed >= 0.38 / this.sensitivity,
+        isSlashing: this.isPalmValidated && this.currentSpeed >= 0.20 / this.sensitivity,
         speed: this.currentSpeed,
         confidence: this.confidence,
         lightLevel: this.lightLevel,
@@ -203,12 +239,25 @@ export class HandTracker {
         isPalmValidated: this.isPalmValidated,
         bodyPartDetected: this.bodyPartDetected,
       };
+      this.lastProcessTimestamp = now;
+      this.cachedTrackingFrame = res;
+      return res;
     }
+
+    // 3. 30fps-Webcam on 60Hz/120Hz Monitor Sync:
+    // If webcam video currentTime has not advanced since last processed frame,
+    // the video frame is identical. Re-sampling now would produce zero delta!
+    if (this.video.currentTime === this.lastVideoCurrentTime && this.cachedTrackingFrame) {
+      this.pruneTrail(now);
+      this.lastProcessTimestamp = now;
+      return this.cachedTrackingFrame;
+    }
+    this.lastVideoCurrentTime = this.video.currentTime;
 
     const w = this.procCanvas.width;
     const h = this.procCanvas.height;
 
-    // Downsampled video frame
+    // Draw downsampled video frame
     try {
       this.procCtx.drawImage(this.video, 0, 0, w, h);
     } catch {
@@ -235,22 +284,24 @@ export class HandTracker {
     const cellW = w / gridCols;
     const cellH = h / gridRows;
 
-    // Accumulate skin motion scores in a spatial grid
+    // Spatial motion grids
     const gridScores = new Float32Array(gridCols * gridRows);
     const gridX = new Float32Array(gridCols * gridRows);
     const gridY = new Float32Array(gridCols * gridRows);
+    let activeCellCount = 0;
 
-    let totalSkinMotionCount = 0;
-    let headZoneSkinCount = 0;
-    let handZoneSkinCount = 0;
+    let totalMotionPixels = 0;
     let skinMinX = w;
     let skinMaxX = 0;
     let skinMinY = h;
     let skinMaxY = 0;
 
+    // Dynamically scaled motion threshold according to sensitivity
+    const motionThreshold = Math.max(14, Math.min(30, 20 / this.sensitivity));
+
     if (this.prevFrameData) {
       const prev = this.prevFrameData;
-      const step = 4 * 2; // sample alternate pixels for 60fps performance
+      const step = 4 * 2; // sample alternate pixels for smooth 60fps performance without CPU spikes
 
       for (let i = 0; i < data.length; i += step) {
         const r = data[i];
@@ -262,71 +313,56 @@ export class HandTracker {
 
         totalBrightness += (r + g + b) / 3;
 
-        // Temporal motion difference
+        // Temporal RGB channel difference
         const motionDiff = Math.abs(r - pr) + Math.abs(g - pg) + Math.abs(b - pb);
 
-        if (motionDiff > 30) {
-          // Precise skin-chrominance test
+        if (motionDiff > motionThreshold) {
+          totalMotionPixels++;
+
+          const pixelIdx = i / 4;
+          const px = pixelIdx % w;
+          const py = Math.floor(pixelIdx / w);
+
+          if (px < skinMinX) skinMinX = px;
+          if (px > skinMaxX) skinMaxX = px;
+          if (py < skinMinY) skinMinY = py;
+          if (py > skinMaxY) skinMaxY = py;
+
+          // Universal Chrominance Analysis:
+          // Robust across Fitzpatrick skin types I through VI and cool/warm room lighting
           const sum = r + g + b;
-          const isSkin = (
-            r > 70 && g > 38 && b > 20 &&
-            r > g && g > b * 0.9 &&
-            (r - g) > 10 &&
-            sum > 140 && sum < 690 &&
-            (r / sum) > 0.35 && (r / sum) < 0.58 &&
-            (g / sum) > 0.25 && (g / sum) < 0.38
+          const nr = sum > 0 ? r / sum : 0;
+          const ng = sum > 0 ? g / sum : 0;
+
+          const isSkinTone = (
+            sum >= 40 && sum <= 740 &&
+            nr >= 0.31 && nr <= 0.64 &&
+            ng >= 0.22 && ng <= 0.42 &&
+            r >= b * 0.82
           );
 
-          if (isSkin) {
-            const pixelIdx = i / 4;
-            const px = pixelIdx % w;
-            const py = Math.floor(pixelIdx / w);
+          // Skin tones get priority weight, but rapid motion from hands in gloves/sleeves is also supported
+          const motionWeight = isSkinTone ? 1.7 : 1.0;
 
-            totalSkinMotionCount++;
-            if (px < skinMinX) skinMinX = px;
-            if (px > skinMaxX) skinMaxX = px;
-            if (py < skinMinY) skinMinY = py;
-            if (py > skinMaxY) skinMaxY = py;
+          const col = Math.min(gridCols - 1, Math.floor(px / cellW));
+          const row = Math.min(gridRows - 1, Math.floor(py / cellH));
+          const cellIdx = row * gridCols + col;
 
-            // Head zone: central upper area of frame
-            const relX = px / w;
-            const relY = py / h;
-            const inFaceZone = (relX > 0.22 && relX < 0.78 && relY < 0.44);
-
-            if (inFaceZone) {
-              headZoneSkinCount++;
-            } else {
-              handZoneSkinCount++;
-            }
-
-            let facePenalty = 1.0;
-            if (this.cameraFacing === 'user') {
-              if (inFaceZone) {
-                facePenalty = 0.08; // Heavy suppression for central head/face area
-              } else if (relY > 0.38) {
-                facePenalty = 1.4; // Boost for lower/mid frame where palms operate
-              }
-            }
-
-            const col = Math.min(gridCols - 1, Math.floor(px / cellW));
-            const row = Math.min(gridRows - 1, Math.floor(py / cellH));
-            const cellIdx = row * gridCols + col;
-
-            const score = motionDiff * facePenalty;
-            gridScores[cellIdx] += score;
-            gridX[cellIdx] += px * score;
-            gridY[cellIdx] += py * score;
-          }
+          const score = motionDiff * motionWeight;
+          if (gridScores[cellIdx] === 0) activeCellCount++;
+          gridScores[cellIdx] += score;
+          gridX[cellIdx] += px * score;
+          gridY[cellIdx] += py * score;
         }
       }
 
-      this.lightLevel = totalBrightness / ((data.length / 4) * 255);
+      this.lightLevel = totalBrightness / ((data.length / (4 * 2)) * 255);
     }
 
-    // Save current frame for next delta
+    // Retain current frame for subsequent delta
     this.prevFrameData = new Uint8ClampedArray(data);
 
-    // Find the dominant moving hand cell cluster
+    // Find the primary moving hand cell cluster
     let maxScore = 0;
     let maxCellIdx = -1;
 
@@ -337,12 +373,13 @@ export class HandTracker {
       }
     }
 
-    // Significant movement detected in grid
-    if (maxScore > 180 && maxCellIdx >= 0 && totalSkinMotionCount >= 18) {
+    // Detect if valid movement exists
+    const minRequiredScore = 120 / this.sensitivity;
+    if (maxScore > minRequiredScore && maxCellIdx >= 0 && totalMotionPixels >= 10) {
       const bestCol = maxCellIdx % gridCols;
       const bestRow = Math.floor(maxCellIdx / gridCols);
 
-      // Compute localized sub-grid centroid around the dominant hand peak (3x3 neighborhood)
+      // Smooth 3x3 centroid calculation around peak motion cell
       let clusterScore = 0;
       let clusterX = 0;
       let clusterY = 0;
@@ -368,54 +405,13 @@ export class HandTracker {
         const clusterHeight = Math.max(1, skinMaxY - skinMinY);
         const clusterAspectRatio = clusterWidth / clusterHeight;
 
-        // Biometric Palm Classification vs Other Body Parts
-        const isHeadPosition = (
-          this.cameraFacing === 'user' &&
-          rawTargetY < h * 0.44 &&
-          rawTargetX > w * 0.22 &&
-          rawTargetX < w * 0.78 &&
-          headZoneSkinCount > totalSkinMotionCount * 0.48
-        );
-
-        const isWholeBodyMotion = (
-          totalSkinMotionCount > 850 ||
-          (clusterHeight > h * 0.58 && clusterWidth > w * 0.48)
-        );
-
-        const isPalmCluster = (
-          !isHeadPosition &&
-          !isWholeBodyMotion &&
-          totalSkinMotionCount >= 20 &&
-          totalSkinMotionCount <= 720 &&
-          clusterWidth >= 8 &&
-          clusterWidth <= w * 0.65 &&
-          clusterHeight >= 8 &&
-          clusterHeight <= h * 0.70 &&
-          clusterAspectRatio >= 0.35 &&
-          clusterAspectRatio <= 2.8
-        );
-
-        if (isHeadPosition) {
-          this.bodyPartDetected = 'head_face';
-          this.isPalmValidated = false;
-        } else if (isWholeBodyMotion) {
-          this.bodyPartDetected = 'torso_body';
-          this.isPalmValidated = false;
-        } else if (isPalmCluster) {
-          this.bodyPartDetected = 'palm';
-          this.isPalmValidated = true;
-        } else {
-          this.bodyPartDetected = 'none';
-          this.isPalmValidated = false;
-        }
-
-        // Mirror horizontal in selfie camera mode
+        // Mirror horizontal coordinate in selfie mode
         let displayRawX = rawTargetX;
         if (this.cameraFacing === 'user') {
           displayRawX = w - displayRawX;
         }
 
-        // Map to display dimensions
+        // Map to game canvas viewport
         const targetX = (displayRawX / w) * viewWidth;
         const targetY = (rawTargetY / h) * viewHeight;
 
@@ -434,13 +430,53 @@ export class HandTracker {
         const rawDist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
         const instantSpeed = rawDist / dt;
 
-        // Adaptive smoothing:
-        const alpha = Math.min(0.44, 0.20 + 0.22 * Math.min(1.0, instantSpeed / 1.5)) * Math.min(1.8, this.sensitivity);
+        // 4. Biometric Distinction: Palm vs Head vs Whole-Body
+        // Whole body movement causes widespread motion over > 50% of the entire grid
+        const isWholeBodyMotion = (
+          activeCellCount > (gridCols * gridRows * 0.52) ||
+          totalMotionPixels > 1100 ||
+          (clusterHeight > h * 0.72 && clusterWidth > w * 0.65)
+        );
+
+        // A face/head sits in the upper-center and is SLOW-MOVING (< 0.20 px/ms)
+        const isSlowHeadPresence = (
+          this.cameraFacing === 'user' &&
+          rawTargetY < h * 0.42 &&
+          rawTargetX > w * 0.25 &&
+          rawTargetX < w * 0.75 &&
+          instantSpeed < 0.20
+        );
+
+        // A palm has localized, agile movement
+        const isPalmCluster = (
+          !isWholeBodyMotion &&
+          !isSlowHeadPresence &&
+          totalMotionPixels >= 10 &&
+          clusterAspectRatio >= 0.25 &&
+          clusterAspectRatio <= 3.8
+        );
+
+        if (isWholeBodyMotion) {
+          this.bodyPartDetected = 'torso_body';
+          this.isPalmValidated = false;
+        } else if (isSlowHeadPresence) {
+          this.bodyPartDetected = 'head_face';
+          this.isPalmValidated = false;
+        } else if (isPalmCluster) {
+          this.bodyPartDetected = 'palm';
+          this.isPalmValidated = true;
+        } else {
+          this.bodyPartDetected = 'none';
+          this.isPalmValidated = false;
+        }
+
+        // Responsive, low-latency smoothing
+        // When slashing fast, alpha goes up to 0.68 for zero-lag precision
+        const alpha = Math.min(0.68, 0.28 + 0.32 * Math.min(1.0, instantSpeed / 1.2)) * Math.min(1.8, this.sensitivity);
 
         this.smoothedX += rawDx * alpha;
         this.smoothedY += rawDy * alpha;
 
-        // Smooth speed calculation
         const dx = this.smoothedX - this.lastX;
         const dy = this.smoothedY - this.lastY;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -449,12 +485,12 @@ export class HandTracker {
         this.lastX = this.smoothedX;
         this.lastY = this.smoothedY;
         this.lastTime = now;
-        this.currentSpeed = this.currentSpeed * 0.6 + filteredSpeed * 0.4;
-        this.confidence = this.isPalmValidated ? Math.min(1.0, clusterScore / 1400) : 0.2;
+        this.currentSpeed = this.currentSpeed * 0.5 + filteredSpeed * 0.5;
+        this.confidence = this.isPalmValidated ? Math.min(1.0, clusterScore / 1100) : 0.25;
         this.isHandFound = this.isPalmValidated;
 
-        // Lethal slash threshold - ONLY ALLOWED IF PALM IS VALIDATED!
-        const minSlashSpeed = 0.35 / this.sensitivity;
+        // Register slash trail points - fluid and agile
+        const minSlashSpeed = 0.18 / this.sensitivity;
         if (this.isPalmValidated && this.currentSpeed >= minSlashSpeed) {
           this.bladePoints.push({
             x: this.smoothedX,
@@ -465,9 +501,9 @@ export class HandTracker {
         }
       }
     } else {
-      // Smooth decay when hand stops or leaves frame
-      this.currentSpeed *= 0.82;
-      this.confidence *= 0.85;
+      // Natural decay when motionless
+      this.currentSpeed *= 0.85;
+      this.confidence *= 0.88;
       if (this.confidence < 0.1) {
         this.isHandFound = false;
         this.isPalmValidated = false;
@@ -477,10 +513,10 @@ export class HandTracker {
 
     this.pruneTrail(now);
 
-    return {
+    const resultFrame: TrackingFrame = {
       x: this.smoothedX,
       y: this.smoothedY,
-      isSlashing: this.isPalmValidated && this.currentSpeed >= 0.35 / this.sensitivity,
+      isSlashing: this.isPalmValidated && this.currentSpeed >= 0.18 / this.sensitivity,
       speed: this.currentSpeed,
       confidence: this.confidence,
       lightLevel: this.lightLevel,
@@ -488,6 +524,11 @@ export class HandTracker {
       isPalmValidated: this.isPalmValidated,
       bodyPartDetected: this.bodyPartDetected,
     };
+
+    this.lastProcessTimestamp = now;
+    this.cachedTrackingFrame = resultFrame;
+
+    return resultFrame;
   }
 
   private pruneTrail(now: number) {
@@ -504,5 +545,6 @@ export class HandTracker {
   public clearTrail() {
     this.bladePoints = [];
     this.currentSpeed = 0;
+    this.cachedTrackingFrame = null;
   }
 }

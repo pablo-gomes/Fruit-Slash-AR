@@ -364,7 +364,19 @@ export class GameEngine {
   }
 
   private checkBladeCollision(obj: SpawnedObject, trail: BladePoint[], activeBlade: BladeStyle) {
-    // Check segment by segment in recent blade trail
+    if (trail.length === 0) return;
+
+    // Single point direct hit check (e.g. at stroke start)
+    if (trail.length === 1) {
+      const p = trail[0];
+      const d = Math.hypot(obj.x - p.x, obj.y - p.y);
+      if (d <= obj.radius * 1.25) {
+        this.sliceObject(obj, 0, p.speed || 1, activeBlade);
+      }
+      return;
+    }
+
+    // Check segment by segment in recent blade trail with generous, responsive hitbox
     for (let i = 0; i < trail.length - 1; i++) {
       const p1 = trail[i];
       const p2 = trail[i + 1];
@@ -372,7 +384,7 @@ export class GameEngine {
       // Calculate distance from circle center to segment p1-p2
       const dist = this.distToSegment(obj.x, obj.y, p1.x, p1.y, p2.x, p2.y);
 
-      if (dist <= obj.radius * 1.08) {
+      if (dist <= obj.radius * 1.25) {
         // Cut hit!
         const sliceAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
         this.sliceObject(obj, sliceAngle, p2.speed || 1, activeBlade);

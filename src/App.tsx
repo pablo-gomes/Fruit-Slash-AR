@@ -200,6 +200,9 @@ export default function App() {
   // Desktop & Smart TV Keyboard / Remote Navigation Controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Keyboard controls
+      handTrackerRef.current.ensureVideoPlaying();
+
       // Toggle Fullscreen on 'F' key
       if (e.code === 'KeyF' && !e.repeat) {
         toggleFullscreen();
@@ -271,13 +274,13 @@ export default function App() {
 
       // Physics update only when actively playing
       if (gameState === 'playing') {
+        const trackFrame = tracker.processFrame(dimensions.width, dimensions.height);
         const trail = tracker.getBladeTrail();
         engine.update(dt, trail, activeBlade);
 
         // Throttled HUD update (15 times/sec) to avoid React Virtual DOM bottlenecks
         if (currentTimestamp - lastHudSync > 66 || engine.isGameOver) {
           lastHudSync = currentTimestamp;
-          const trackFrame = tracker.processFrame(dimensions.width, dimensions.height);
           setHudState({
             score: engine.score,
             lives: engine.lives,
@@ -331,6 +334,7 @@ export default function App() {
 
   // Instant Game Start - Loads instantly with zero delay!
   const startGame = (mode: GameMode = gameMode) => {
+    handTrackerRef.current.ensureVideoPlaying();
     setGameMode(mode);
     gameEngineRef.current.reset(mode);
     handTrackerRef.current.clearTrail();
@@ -342,6 +346,7 @@ export default function App() {
 
   // Touch / Mouse Swipe event handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    handTrackerRef.current.ensureVideoPlaying();
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
