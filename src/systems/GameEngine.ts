@@ -229,17 +229,14 @@ export class GameEngine {
     let customVariant: { name: string; emoji: string; color: string; juiceColor: string } | null = null;
 
     if (this.frenzyActive) {
-      // Frenzy Bonus Mode: Yellow fruits flood the screen with sneaky disguised bombs mixed in!
+      // Frenzy Bonus Mode: Pure storm of golden & yellow fruits! 100% safe bonus slicing
       type = 'golden';
       customVariant = YELLOW_FRUIT_VARIANTS[Math.floor(Math.random() * YELLOW_FRUIT_VARIANTS.length)];
-
-      // Disguised bomb roll: ~24% chance unless in zen mode (user requested disguised bombs in bonus mode)
-      if (this.mode !== 'zen' && Math.random() < 0.24) {
-        isDisguisedBomb = true;
-      }
+      isDisguisedBomb = false;
     } else {
       const isBombRush = this.mode === 'bomb_rush';
-      const bombChance = this.mode === 'zen' ? 0 : isBombRush ? 0.45 : 0.18;
+      // In Fruit Rain ('fruit_rain') and Zen ('zen') modes, NO bombs spawn so players can slice clusters freely
+      const bombChance = (this.mode === 'zen' || this.mode === 'fruit_rain') ? 0 : isBombRush ? 0.45 : 0.18;
 
       if (Math.random() < bombChance) {
         type = 'bomb';
@@ -283,11 +280,11 @@ export class GameEngine {
     const heightDiff = Math.max(80, startY - targetApexY);
     const launchVy = -Math.sqrt(2 * gravity * heightDiff) * (cfg.speedMultiplier || 1.0) * 0.94;
 
-    const isBomb = isDisguisedBomb ? true : !!cfg.isBomb;
-    const objName = isDisguisedBomb ? 'Bomba Disfarçada' : (customVariant ? customVariant.name : cfg.name);
+    const isBomb = type === 'bomb';
+    const objName = customVariant ? customVariant.name : cfg.name;
     const objEmoji = customVariant ? customVariant.emoji : cfg.emoji;
     const objColor = customVariant ? customVariant.color : cfg.color;
-    const objJuiceColor = isDisguisedBomb ? '#FF3D71' : (customVariant ? customVariant.juiceColor : cfg.juiceColor);
+    const objJuiceColor = customVariant ? customVariant.juiceColor : cfg.juiceColor;
 
     const obj: SpawnedObject = {
       id: Math.random().toString(36).substring(2, 9),
@@ -299,11 +296,11 @@ export class GameEngine {
       vx,
       vy: launchVy,
       radius: scaledRadius,
-      points: isDisguisedBomb ? 0 : cfg.points,
+      points: cfg.points,
       color: objColor,
       juiceColor: objJuiceColor,
       isBomb,
-      isDisguisedBomb,
+      isDisguisedBomb: false,
       rotation: Math.random() * Math.PI * 2,
       vRot: (Math.random() - 0.5) * 5.0,
       sliced: false,
@@ -311,8 +308,8 @@ export class GameEngine {
       sliceTime: 0,
     };
 
-    // Only play audible siren on standard bombs, keeping disguised bombs stealthy
-    if (obj.isBomb && !isDisguisedBomb) {
+    // Play audible siren on standard bombs
+    if (obj.isBomb) {
       soundEngine.playBombWarning();
     }
 
@@ -417,8 +414,9 @@ export class GameEngine {
     obj.sliceAngle = sliceAngle;
     obj.sliceTime = now;
 
-    // Check if it's a bomb
-    if (obj.isBomb) {
+    // Check if it's a bomb (Fruit Rain, Zen, Frenzy, or any fruit cuts NEVER deduct life)
+    const isProtectedMode = this.frenzyActive || this.mode === 'fruit_rain' || this.mode === 'zen';
+    if (obj.isBomb && obj.type === 'bomb' && !isProtectedMode) {
       this.handleBombCut(obj);
       return;
     }
@@ -553,7 +551,7 @@ export class GameEngine {
     this.screenShake = 8;
     soundEngine.startFrenzyMusic();
     soundEngine.playCombo(10);
-    this.addFloatingText('🔥 BÔNUS AMARELO! CUIDADO! 🔥', this.width / 2, this.height * 0.3, '#FFD23F', 2.0);
+    this.addFloatingText('🔥 FRENZY! CORTE TODAS AS FRUTAS! 🔥', this.width / 2, this.height * 0.3, '#FFD23F', 2.0);
   }
 
   private createJuiceSplatter(x: number, y: number, juiceColor: string, bladeColor: string, sliceAngle: number) {
