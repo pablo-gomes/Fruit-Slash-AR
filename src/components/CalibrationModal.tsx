@@ -108,7 +108,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
           <input
             id="slider-calib-sensitivity"
             type="range"
-            min="0.5"
+            min="0.2"
             max="2.0"
             step="0.1"
             value={sensitivity}
@@ -116,8 +116,8 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
             className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-cyan-400"
           />
           <div className="flex justify-between text-[10px] text-white/40">
-            <span>Mais Suave</span>
-            <span>Mais Rápido</span>
+            <span>0.2x (Mais Lento e Firme)</span>
+            <span>2.0x (Mais Ágil)</span>
           </div>
         </div>
 

@@ -43,8 +43,8 @@ export class HandTracker {
 
   // Trajectory history for blade trail
   private bladePoints: BladePoint[] = [];
-  private maxTrailLength: number = 28;
-  private maxTrailAge: number = 240; // milliseconds
+  private maxTrailLength: number = 20;
+  private maxTrailAge: number = 190; // milliseconds
 
   // Grid dimensions for clustering motion (16x12 grid = 192 cells)
   private readonly gridCols = 16;
@@ -282,8 +282,8 @@ export class HandTracker {
 
     let totalMotionPixels = 0;
 
-    // Highly responsive motion threshold to detect all hand gestures
-    const motionThreshold = Math.max(8, Math.min(20, 13 / this.sensitivity));
+    // Responsive yet noise-rejecting motion threshold
+    const motionThreshold = Math.max(14, Math.min(28, 20 / Math.sqrt(Math.max(0.35, this.sensitivity))));
 
     if (this.prevFrameData) {
       const prev = this.prevFrameData;
@@ -336,9 +336,9 @@ export class HandTracker {
       }
     }
 
-    // Capture any hand gesture (low threshold so chops, fists, swipes, or waves register instantly)
-    const minRequiredScore = Math.max(25, 50 / this.sensitivity);
-    if (maxScore > minRequiredScore && maxCellIdx >= 0 && totalMotionPixels >= 4) {
+    // Capture intentional hand gestures while rejecting video sensor noise
+    const minRequiredScore = Math.max(60, 110 / Math.max(0.35, this.sensitivity));
+    if (maxScore > minRequiredScore && maxCellIdx >= 0 && totalMotionPixels >= 7) {
       const bestCol = maxCellIdx % gridCols;
       const bestRow = Math.floor(maxCellIdx / gridCols);
 
@@ -389,12 +389,16 @@ export class HandTracker {
         const rawDist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
         const instantSpeed = rawDist / dt;
 
-        // Low-latency smoothing:
-        // Slashing fast -> high alpha (up to 0.75) for instant cuts with any gesture
-        const alpha = Math.min(0.75, 0.32 + 0.38 * Math.min(1.0, instantSpeed / 1.0)) * Math.min(1.8, this.sensitivity);
+        // Controlled, smooth interpolation (prevents twitching and hyper-sensitivity)
+        // Base alpha is relaxed (~0.16 at 1.0x sensitivity), scaling smoothly with deliberate swipes
+        if (rawDist >= 3.5) {
+          const baseAlpha = 0.16 * Math.max(0.35, Math.min(1.15, this.sensitivity));
+          const dynamicBoost = 0.18 * Math.min(1.0, instantSpeed / 1.5);
+          const alpha = Math.min(0.38, baseAlpha + dynamicBoost);
 
-        this.smoothedX += rawDx * alpha;
-        this.smoothedY += rawDy * alpha;
+          this.smoothedX += rawDx * alpha;
+          this.smoothedY += rawDy * alpha;
+        }
 
         const dx = this.smoothedX - this.lastX;
         const dy = this.smoothedY - this.lastY;
@@ -404,15 +408,15 @@ export class HandTracker {
         this.lastX = this.smoothedX;
         this.lastY = this.smoothedY;
         this.lastTime = now;
-        this.currentSpeed = this.currentSpeed * 0.45 + filteredSpeed * 0.55;
-        this.confidence = Math.min(1.0, clusterScore / 700);
+        this.currentSpeed = this.currentSpeed * 0.55 + filteredSpeed * 0.45;
+        this.confidence = Math.min(1.0, clusterScore / 850);
         this.isHandFound = true;
         this.isPalmValidated = true;
         this.bodyPartDetected = 'palm';
 
-        // Register slash trail points for ANY gesture
-        const minSlashSpeed = 0.09 / this.sensitivity;
-        if (this.currentSpeed >= minSlashSpeed || instantSpeed >= minSlashSpeed) {
+        // Register slash trail points only on intentional swipe / gesture
+        const minSlashSpeed = 0.24 / Math.max(0.35, this.sensitivity);
+        if (this.currentSpeed >= minSlashSpeed) {
           this.bladePoints.push({
             x: this.smoothedX,
             y: this.smoothedY,
@@ -423,16 +427,17 @@ export class HandTracker {
       }
     } else {
       // Natural decay when motionless
-      this.currentSpeed *= 0.85;
-      this.confidence *= 0.88;
-      if (this.confidence < 0.1) {
+      this.currentSpeed *= 0.80;
+      this.confidence *= 0.85;
+      if (this.confidence < 0.08) {
         this.isHandFound = false;
       }
     }
 
     this.pruneTrail(now);
 
-    const isSlashing = this.currentSpeed >= (0.09 / this.sensitivity) || this.bladePoints.length > 0;
+    const minSlashSpeed = 0.24 / Math.max(0.35, this.sensitivity);
+    const isSlashing = this.currentSpeed >= minSlashSpeed && this.bladePoints.length > 0;
 
     const resultFrame: TrackingFrame = {
       x: this.smoothedX || viewWidth / 2,

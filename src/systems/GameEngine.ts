@@ -217,6 +217,11 @@ export class GameEngine {
     return Math.max(0.75, Math.min(2.3, ratio));
   }
 
+  public getGravity(): number {
+    // Smoother, slightly slower gravity to allow players to react comfortably and enjoy clean slices
+    return Math.max(480, this.height * 0.86);
+  }
+
   private spawnSingleObject(pattern: number, index: number, totalInBatch: number) {
     // Select object type
     let type: FruitType = 'apple';
@@ -272,11 +277,11 @@ export class GameEngine {
     }
 
     const startY = this.height + scaledRadius + 10;
-    // Launch velocity: scaled dynamically with screen height so fruits have consistent airtime
-    const targetApexY = this.height * (0.16 + Math.random() * 0.30);
-    const gravity = Math.max(650, this.height * 1.15); // px/s^2 proportional to viewport height
+    // Launch velocity: scaled dynamically with screen height for graceful arc and airtime
+    const targetApexY = this.height * (0.18 + Math.random() * 0.26);
+    const gravity = this.getGravity();
     const heightDiff = Math.max(80, startY - targetApexY);
-    const launchVy = -Math.sqrt(2 * gravity * heightDiff) * (cfg.speedMultiplier || 1.0);
+    const launchVy = -Math.sqrt(2 * gravity * heightDiff) * (cfg.speedMultiplier || 1.0) * 0.94;
 
     const isBomb = isDisguisedBomb ? true : !!cfg.isBomb;
     const objName = isDisguisedBomb ? 'Bomba Disfarçada' : (customVariant ? customVariant.name : cfg.name);
@@ -315,7 +320,7 @@ export class GameEngine {
   }
 
   private updateObjects(dt: number, bladeTrail: BladePoint[], activeBlade: BladeStyle) {
-    const gravity = Math.max(650, this.height * 1.15);
+    const gravity = this.getGravity();
 
     for (let i = this.objects.length - 1; i >= 0; i--) {
       const obj = this.objects[i];

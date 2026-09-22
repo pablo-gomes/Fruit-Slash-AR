@@ -160,13 +160,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <input
               id="slider-settings-sensitivity"
               type="range"
-              min="0.5"
+              min="0.2"
               max="2.0"
               step="0.1"
               value={settings.sensitivity}
               onChange={(e) => onUpdateSettings({ sensitivity: parseFloat(e.target.value) })}
               className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-purple-400"
             />
+            <div className="flex justify-between text-[10px] text-white/40">
+              <span>0.2x (Mais Lento e Estável)</span>
+              <span>2.0x (Ultra Rápido)</span>
+            </div>
           </div>
 
           {/* Reset High Scores */}
