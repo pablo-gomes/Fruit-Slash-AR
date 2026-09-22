@@ -7,6 +7,7 @@ const config = getDefaultConfig(__dirname);
 // Isso evita que o Metro suba para o diretório pai (Fruit-Slash-AR)
 // e encontre o 'expo' instalado lá, que causa o erro "Unable to resolve ../../App".
 config.resolver.nodeModulesPaths = [path.resolve(__dirname, 'node_modules')];
+config.resolver.disableHierarchicalLookup = true;
 
 // Definir explicitamente o root do projeto
 config.projectRoot = __dirname;
