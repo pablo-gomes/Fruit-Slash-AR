@@ -135,19 +135,19 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           )}
         </div>
 
-        {/* Hand Tracking Confidence & Palm Recognition Pill */}
+        {/* Hand Tracking Confidence & Motion Indicator Pill */}
         <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
           <div
             className={`w-2.5 h-2.5 rounded-full transition-colors duration-300 ${
-              handConfidence > 0.4
+              handConfidence > 0.25
                 ? 'bg-emerald-400 shadow-[0_0_8px_#34D399]'
-                : handConfidence > 0.1
+                : handConfidence > 0.08
                 ? 'bg-amber-400 shadow-[0_0_8px_#FBBF24]'
                 : 'bg-red-400 shadow-[0_0_8px_#F87171]'
             }`}
           />
           <span className="text-[11px] sm:text-xs text-white/80 font-medium">
-            {handConfidence > 0.35 ? 'Palma Ativa ✋' : 'Use a Palma da Mão ✋'}
+            {handConfidence > 0.2 ? 'Movimento Ativo ⚡' : 'Mova a Mão / Gesto ✋'}
           </span>
         </div>
       </div>

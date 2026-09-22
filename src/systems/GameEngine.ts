@@ -366,17 +366,20 @@ export class GameEngine {
   private checkBladeCollision(obj: SpawnedObject, trail: BladePoint[], activeBlade: BladeStyle) {
     if (trail.length === 0) return;
 
-    // Single point direct hit check (e.g. at stroke start)
-    if (trail.length === 1) {
-      const p = trail[0];
+    const hitRadius = obj.radius * 1.38;
+
+    // Direct point hit check on all recent points (e.g. rapid taps, chops, or quick swipes)
+    for (let i = 0; i < trail.length; i++) {
+      const p = trail[i];
       const d = Math.hypot(obj.x - p.x, obj.y - p.y);
-      if (d <= obj.radius * 1.25) {
-        this.sliceObject(obj, 0, p.speed || 1, activeBlade);
+      if (d <= hitRadius) {
+        const sliceAngle = i > 0 ? Math.atan2(p.y - trail[i - 1].y, p.x - trail[i - 1].x) : 0;
+        this.sliceObject(obj, sliceAngle, p.speed || 1.2, activeBlade);
+        return;
       }
-      return;
     }
 
-    // Check segment by segment in recent blade trail with generous, responsive hitbox
+    // Check segment by segment in recent blade trail for continuous slice coverage
     for (let i = 0; i < trail.length - 1; i++) {
       const p1 = trail[i];
       const p2 = trail[i + 1];
@@ -384,10 +387,10 @@ export class GameEngine {
       // Calculate distance from circle center to segment p1-p2
       const dist = this.distToSegment(obj.x, obj.y, p1.x, p1.y, p2.x, p2.y);
 
-      if (dist <= obj.radius * 1.25) {
+      if (dist <= hitRadius) {
         // Cut hit!
         const sliceAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-        this.sliceObject(obj, sliceAngle, p2.speed || 1, activeBlade);
+        this.sliceObject(obj, sliceAngle, p2.speed || 1.2, activeBlade);
         break;
       }
     }

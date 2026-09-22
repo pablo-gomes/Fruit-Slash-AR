@@ -466,8 +466,8 @@ function drawHandCrosshair(
   isSlashing: boolean,
   blade: BladeStyle,
   confidence: number = 0.5,
-  isPalmValidated: boolean = false,
-  bodyPartDetected: 'palm' | 'head_face' | 'torso_body' | 'none' = 'none',
+  isPalmValidated: boolean = true,
+  bodyPartDetected: 'palm' | 'head_face' | 'torso_body' | 'none' = 'palm',
   scale: number = 1.0
 ) {
   ctx.save();
@@ -476,31 +476,14 @@ function drawHandCrosshair(
   const t = Date.now() * 0.003;
   const radius = (isSlashing ? 28 : 20) * scale;
 
-  // Determine indicator colors and status message
-  let strokeColor = isSlashing ? blade.color : 'rgba(66, 232, 255, 0.7)';
-  let glowColor = blade.color;
-  let label = `✋ PALMA OK ${Math.round(confidence * 100)}%`;
-  let labelColor = isSlashing ? blade.color : 'rgba(255, 255, 255, 0.9)';
+  // Indicator colors and status message for universal gestures
+  const strokeColor = isSlashing ? blade.color : 'rgba(66, 232, 255, 0.85)';
+  const glowColor = blade.color;
+  let label = isSlashing ? '⚡ CORTE!' : `⚔️ GESTO ATIVO ${Math.round(confidence * 100)}%`;
+  const labelColor = isSlashing ? blade.color : '#FFFFFF';
 
-  if (isSlashing) {
-    label = '⚡ CORTE!';
-  } else if (!isPalmValidated) {
-    if (bodyPartDetected === 'head_face') {
-      strokeColor = '#FF9F1C';
-      glowColor = '#FF9F1C';
-      label = '⚠️ ROSTO/CABEÇA (USE A PALMA ✋)';
-      labelColor = '#FFD23F';
-    } else if (bodyPartDetected === 'torso_body') {
-      strokeColor = '#FF3D71';
-      glowColor = '#FF3D71';
-      label = '⚠️ CORPO (USE A PALMA ✋)';
-      labelColor = '#FF3D71';
-    } else {
-      strokeColor = 'rgba(255, 255, 255, 0.4)';
-      glowColor = '#00E5FF';
-      label = '✋ MOSTRE A PALMA DA MÃO';
-      labelColor = 'rgba(255, 255, 255, 0.7)';
-    }
+  if (!isSlashing && confidence < 0.25) {
+    label = '✋ MOVA A MÃO';
   }
 
   // Outer segmented targeting arcs that gently rotate

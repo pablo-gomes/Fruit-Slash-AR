@@ -138,15 +138,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             AR
           </span>
           <span className="px-2 py-0.5 bg-white/10 rounded text-[10px] sm:text-xs uppercase font-bold text-white/70 tracking-widest">
-            Detecção de Palma ✋
+            Detecção Livre ⚡
           </span>
         </div>
 
-        {/* Biometric Palm Rule & Cross-Device Banner */}
+        {/* Universal Gesture & Cross-Device Banner */}
         <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2 max-w-lg">
-          <span className="text-[11px] sm:text-xs text-amber-300 font-semibold bg-amber-500/15 border border-amber-400/30 px-3 py-0.5 rounded-full flex items-center gap-1">
-            <Hand className="w-3 h-3 text-amber-300" />
-            Apenas a palma da mão corta frutas (cabeça e corpo ignorados)
+          <span className="text-[11px] sm:text-xs text-cyan-300 font-semibold bg-cyan-500/15 border border-cyan-400/30 px-3 py-0.5 rounded-full flex items-center gap-1">
+            <Hand className="w-3 h-3 text-cyan-300" />
+            Corte frutas livremente com qualquer gesto ou movimento da mão ⚔️
           </span>
           <span className="text-[10px] text-white/50 hidden md:inline">
             📺 TV • 💻 Desktop • 📱 Mobile

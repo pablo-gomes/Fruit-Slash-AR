@@ -64,10 +64,10 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
           <p className="mt-3 text-xs font-semibold text-white/80 tracking-wide text-center z-10">
             {isHandDetected ? (
               <span className="text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 inline" /> PALMA DA MÃO RECONHECIDA!
+                <CheckCircle2 className="w-4 h-4 inline" /> GESTO / MOVIMENTO RECONHECIDO!
               </span>
             ) : (
-              'Abra a palma da mão para a câmera (cabeça e corpo são ignorados)'
+              'Mova a mão ou faça qualquer gesto na frente da câmera'
             )}
           </p>
         </div>
