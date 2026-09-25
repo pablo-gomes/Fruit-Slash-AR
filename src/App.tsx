@@ -20,6 +20,15 @@ import { ShopModal } from './components/ShopModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ExpoGuideModal } from './components/ExpoGuideModal';
 import { CountdownOverlay } from './components/CountdownOverlay';
+import { LeaderboardModal } from './components/LeaderboardModal';
+import { 
+  getStoredUsername, 
+  setStoredUsername, 
+  getStoredLeaderboard, 
+  recordScoreInLeaderboard, 
+  resetStoredLeaderboard 
+} from './data/leaderboard';
+import { LeaderboardEntry } from './types';
 import { Camera, CameraOff, Maximize2, SwitchCamera, Swords } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -90,6 +99,26 @@ export default function App() {
       quality: 'high',
     };
   });
+
+  // User Profile & Browser Leaderboard
+  const [username, setUsername] = useState<string>(() => getStoredUsername());
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(() => getStoredLeaderboard());
+  const [lastRankPosition, setLastRankPosition] = useState<number | undefined>(undefined);
+  const usernameRef = useRef<string>(username);
+
+  useEffect(() => {
+    usernameRef.current = username;
+  }, [username]);
+
+  const handleUpdateUsername = (newName: string) => {
+    const clean = setStoredUsername(newName);
+    setUsername(clean);
+  };
+
+  const handleResetLeaderboard = () => {
+    const defaults = resetStoredLeaderboard();
+    setLeaderboard(defaults);
+  };
 
   // Dimensions
   const [dimensions, setDimensions] = useState({
@@ -310,6 +339,19 @@ export default function App() {
           const earned = engine.coinsEarned;
           setCoins((prev) => prev + earned);
 
+          // Save score into browser localStorage ranking
+          const { updatedList, rankPosition } = recordScoreInLeaderboard({
+            username: usernameRef.current,
+            score: finalScore,
+            mode: gameMode,
+            maxCombo: engine.maxComboAchieved,
+            cutsCount: engine.cutsCount,
+            accuracy: engine.getAccuracy(),
+            bladeName: activeBlade.name,
+          });
+          setLeaderboard(updatedList);
+          setLastRankPosition(rankPosition);
+
           setLastGameOverStats({
             score: finalScore,
             highScore: isNewRecord ? finalScore : currentModeBest,
@@ -403,6 +445,7 @@ export default function App() {
     const empty = { classic: 0, time_attack: 0, zen: 0, bomb_rush: 0, fruit_rain: 0 };
     setHighScores(empty);
     setCoins(50);
+    handleResetLeaderboard();
   };
 
   return (
@@ -519,6 +562,9 @@ export default function App() {
           highScore={highScores[gameMode] || 0}
           coins={coins}
           activeBlade={activeBlade}
+          username={username}
+          onOpenRanking={() => setGameState('ranking')}
+          onChangeUsername={handleUpdateUsername}
           onStartCalibration={() => setGameState('calibration')}
           onDirectPlay={() => startGame(gameMode)}
           onOpenShop={() => setGameState('shop')}
@@ -547,6 +593,10 @@ export default function App() {
           maxCombo={lastGameOverStats.maxCombo}
           accuracy={lastGameOverStats.accuracy}
           coinsEarned={lastGameOverStats.coinsEarned}
+          username={username}
+          rankPosition={lastRankPosition}
+          onOpenRanking={() => setGameState('ranking')}
+          onChangeUsername={handleUpdateUsername}
           onRestart={() => startGame(gameMode)}
           onHome={() => setGameState('menu')}
         />
@@ -596,9 +646,23 @@ export default function App() {
       {gameState === 'settings' && (
         <SettingsModal
           settings={settings}
+          username={username}
+          onUpdateUsername={handleUpdateUsername}
           onUpdateSettings={(newSettings) => setSettings((s) => ({ ...s, ...newSettings }))}
           onResetRecords={handleResetRecords}
           onClose={() => setGameState('menu')}
+        />
+      )}
+
+      {/* Leaderboard / Ranking Modal */}
+      {gameState === 'ranking' && (
+        <LeaderboardModal
+          entries={leaderboard}
+          currentUsername={username}
+          onUpdateUsername={handleUpdateUsername}
+          onResetLeaderboard={handleResetLeaderboard}
+          onClose={() => setGameState('menu')}
+          onPlayMode={(mode) => startGame(mode)}
         />
       )}
 
