@@ -58,6 +58,7 @@ export class GameEngine {
   public frenzyActive: boolean = false;
   public frenzyTimer: number = 0;
   public frenzyMaxTime: number = 4.0; // Shorter, intense bonus rush (user requested)
+  public frenzyUsedInMatch: boolean = false; // Only triggers once per match as requested
 
   public freezeTimer: number = 0;
   public timeRemaining: number = 60; // for time_attack
@@ -100,6 +101,7 @@ export class GameEngine {
     this.currentSlashCuts = 0;
     this.frenzyActive = false;
     this.frenzyTimer = 0;
+    this.frenzyUsedInMatch = false;
     this.freezeTimer = 0;
     this.timeRemaining = mode === 'time_attack' ? 60 : 0;
     this.cutsCount = 0;
@@ -448,8 +450,8 @@ export class GameEngine {
     // Reset combo decay timer (2.8 seconds of grace period)
     this.comboExpireTimer = 2.8;
 
-    // Check for Frenzy activation (Combo 10+, Section 12)
-    if (this.combo >= 10 && !this.frenzyActive) {
+    // Check for Frenzy activation (Combo 10+, triggers only once per match as requested)
+    if (this.combo >= 10 && !this.frenzyActive && !this.frenzyUsedInMatch) {
       this.activateFrenzyMode();
     }
 
@@ -546,12 +548,14 @@ export class GameEngine {
   }
 
   public activateFrenzyMode() {
+    if (this.frenzyUsedInMatch) return;
+    this.frenzyUsedInMatch = true;
     this.frenzyActive = true;
     this.frenzyTimer = this.frenzyMaxTime;
     this.screenShake = 8;
     soundEngine.startFrenzyMusic();
     soundEngine.playCombo(10);
-    this.addFloatingText('🔥 FRENZY! CORTE TODAS AS FRUTAS! 🔥', this.width / 2, this.height * 0.3, '#FFD23F', 2.0);
+    this.addFloatingText('🔥 BÔNUS AMARELO! CORTE TODAS AS FRUTAS! 🔥', this.width / 2, this.height * 0.3, '#FFD23F', 2.0);
   }
 
   private createJuiceSplatter(x: number, y: number, juiceColor: string, bladeColor: string, sliceAngle: number) {
