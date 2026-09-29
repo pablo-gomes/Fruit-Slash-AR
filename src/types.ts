@@ -10,6 +10,7 @@ export type GameState =
   | 'settings' 
   | 'shop' 
   | 'challenges' 
+  | 'ranking'
   | 'expo_guide';
 
 export type FruitType = 
@@ -139,3 +140,17 @@ export interface GameSettings {
   showHandDebug: boolean;
   quality: 'high' | 'normal';
 }
+
+export interface LeaderboardEntry {
+  id: string;
+  username: string;
+  score: number;
+  mode: GameMode;
+  maxCombo: number;
+  cutsCount: number;
+  accuracy: number;
+  bladeName: string;
+  date: string;
+  isPlayer?: boolean;
+}
+

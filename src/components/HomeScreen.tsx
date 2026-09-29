@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GameMode, BladeStyle } from '../types';
 import { 
   Play, 
@@ -12,7 +12,10 @@ import {
   Bomb, 
   CloudRain, 
   Heart,
-  Hand
+  Hand,
+  User,
+  Edit3,
+  Check
 } from 'lucide-react';
 
 interface HomeScreenProps {
@@ -21,6 +24,9 @@ interface HomeScreenProps {
   highScore: number;
   coins: number;
   activeBlade: BladeStyle;
+  username: string;
+  onOpenRanking: () => void;
+  onChangeUsername?: (name: string) => void;
   onStartCalibration: () => void;
   onDirectPlay: () => void;
   onOpenShop: () => void;
@@ -80,6 +86,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   highScore,
   coins,
   activeBlade,
+  username,
+  onOpenRanking,
+  onChangeUsername,
   onStartCalibration,
   onDirectPlay,
   onOpenShop,
@@ -88,19 +97,48 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 }) => {
   return (
     <div className="relative z-30 w-full max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto flex flex-col items-center justify-between min-h-[90vh] py-3 sm:py-5 px-3 sm:px-6">
-      {/* Top Bar: High Score & Coins & Expo Link */}
-      <div className="w-full flex items-center justify-between gap-2">
-        {/* High Score Badge */}
-        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 sm:px-4 py-1.5 rounded-full border border-white/10 shadow-lg">
-          <Trophy className="w-4 h-4 text-amber-400" />
-          <span className="text-xs text-white/60 font-medium hidden sm:inline">Recorde:</span>
-          <span className="font-arcade text-xs sm:text-sm font-bold text-amber-300">
-            {highScore.toLocaleString()}
-          </span>
+      {/* Top Bar: User Nickname, High Score & Actions */}
+      <div className="w-full flex flex-wrap items-center justify-between gap-2">
+        {/* Left: User Profile & Personal High Score */}
+        <div className="flex items-center gap-2">
+          {/* User Profile Pill */}
+          <button
+            id="btn-home-user-profile"
+            onClick={onOpenRanking}
+            className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-cyan-500/30 hover:border-cyan-400 transition-all cursor-pointer group"
+            title="Clique para ver seu ranking ou alterar nome"
+          >
+            <User className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-bold text-white max-w-[90px] sm:max-w-[130px] truncate">
+              {username}
+            </span>
+            <Edit3 className="w-2.5 h-2.5 text-white/40 group-hover:text-cyan-300" />
+          </button>
+
+          {/* High Score Badge */}
+          <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-xs text-white/60 font-medium hidden sm:inline">Recorde:</span>
+            <span className="font-arcade text-xs sm:text-sm font-bold text-amber-300">
+              {highScore.toLocaleString()}
+            </span>
+          </div>
         </div>
 
-        {/* Coins & Expo Framework Tag */}
+        {/* Right: Ranking, Coins & Expo Link */}
         <div className="flex items-center gap-2">
+          {/* Ranking Quick Button */}
+          <button
+            id="btn-home-ranking-top"
+            onClick={onOpenRanking}
+            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/10 hover:from-amber-500/30 hover:to-yellow-500/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-amber-400/40 text-amber-300 transition-all text-xs font-semibold cursor-pointer shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+            title="Ver Tabela de Ranking"
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-arcade text-xs">Ranking</span>
+          </button>
+
+          {/* Coins */}
           <button
             id="btn-home-shop-coins"
             onClick={onOpenShop}
@@ -248,14 +286,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </button>
 
         {/* Secondary Tool Buttons */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
-            id="btn-home-calib"
-            onClick={onStartCalibration}
-            className="py-2.5 bg-white/10 hover:bg-white/15 active:scale-95 rounded-xl font-arcade text-[11px] sm:text-xs font-bold text-white/90 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            id="btn-home-ranking-bottom"
+            onClick={onOpenRanking}
+            className="py-2.5 bg-gradient-to-r from-amber-500/15 to-yellow-500/10 hover:from-amber-500/25 hover:to-yellow-500/20 border border-amber-400/30 active:scale-95 rounded-xl font-arcade text-[11px] sm:text-xs font-bold text-amber-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-[0_0_10px_rgba(245,158,11,0.15)]"
           >
-            <Camera className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Calibrar</span>
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span>Ranking</span>
           </button>
 
           <button
@@ -265,6 +303,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           >
             <Swords className="w-3.5 h-3.5 text-[#FF3D71]" />
             <span>Lâminas</span>
+          </button>
+
+          <button
+            id="btn-home-calib"
+            onClick={onStartCalibration}
+            className="py-2.5 bg-white/10 hover:bg-white/15 active:scale-95 rounded-xl font-arcade text-[11px] sm:text-xs font-bold text-white/90 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Camera className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Calibrar</span>
           </button>
 
           <button

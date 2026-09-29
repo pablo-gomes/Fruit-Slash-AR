@@ -64,7 +64,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 </span>
               </div>
               <span className="text-[9px] sm:text-[10px] font-bold text-yellow-300 drop-shadow">
-                ⚠️ Cuidado com Bombas Disfarçadas!
+                ⭐ Corte tudo! Bônus único da partida! ⭐
               </span>
             </div>
           )}

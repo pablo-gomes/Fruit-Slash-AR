@@ -1,9 +1,11 @@
 import React from 'react';
 import { GameSettings } from '../types';
-import { Volume2, Music, Vibrate, Camera, Hand, MousePointer, Sliders, RotateCcw, X } from 'lucide-react';
+import { Volume2, Music, Vibrate, Camera, Hand, MousePointer, Sliders, RotateCcw, X, User } from 'lucide-react';
 
 interface SettingsModalProps {
   settings: GameSettings;
+  username: string;
+  onUpdateUsername: (newName: string) => void;
   onUpdateSettings: (newSettings: Partial<GameSettings>) => void;
   onResetRecords: () => void;
   onClose: () => void;
@@ -11,6 +13,8 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
+  username,
+  onUpdateUsername,
   onUpdateSettings,
   onResetRecords,
   onClose,
@@ -33,6 +37,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="space-y-4 mb-6">
+          {/* Player Nickname */}
+          <div className="bg-[#181828] border border-white/5 rounded-xl p-3.5 flex flex-col gap-2">
+            <span className="text-white/80 font-semibold flex items-center gap-2 text-xs">
+              <User className="w-4 h-4 text-cyan-400" /> Nome do Jogador (Ranking)
+            </span>
+            <input
+              id="input-settings-username"
+              type="text"
+              value={username}
+              onChange={(e) => onUpdateUsername(e.target.value.slice(0, 20))}
+              placeholder="Digite seu nome..."
+              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-xs font-bold text-white focus:outline-none focus:border-cyan-400"
+            />
+            <span className="text-[10px] text-white/40">
+              Nome salvo localmente no navegador e exibido no Hall da Fama.
+            </span>
+          </div>
+
           {/* Audio SFX */}
           <div className="bg-[#181828] border border-white/5 rounded-xl p-3.5 flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs">
