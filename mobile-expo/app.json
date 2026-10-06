@@ -1,25 +1,36 @@
 {
   "expo": {
-    "name": "mobile-expo",
-    "slug": "mobile-expo",
-    "entryPoint": "./index.js",
+    "name": "Fruit Slash AR",
+    "slug": "fruit-slash-ar",
     "version": "1.0.0",
     "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0F0F1A",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Fruit Slash AR precisa de acesso à câmera para a experiência de Realidade Aumentada (AR)."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+        "backgroundColor": "#0F0F1A",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.VIBRATE"
+      ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Fruit Slash AR precisa de acesso à câmera para a experiência de Realidade Aumentada (AR)."
+        }
+      ],
+      "expo-font"
+    ]
   }
 }

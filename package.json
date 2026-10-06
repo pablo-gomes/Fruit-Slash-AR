@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "mobile": "npm --prefix mobile-expo start",
+    "mobile:android": "npm --prefix mobile-expo run android",
+    "mobile:ios": "npm --prefix mobile-expo run ios",
+    "mobile:web": "npm --prefix mobile-expo run web"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
